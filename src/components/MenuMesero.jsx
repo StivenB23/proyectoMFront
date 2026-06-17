@@ -181,7 +181,7 @@ function MenuMesero({ usuario, setPagina }) {
           items,
         };
         await api.post(`/mesas/${mesaSeleccionada.id}/pedidos`, payload);
-        alert(`Pedido creado para Mesa #${mesaSeleccionada.numero}`);
+        alert(`Pedido creado en estado PENDIENTE para Mesa #${mesaSeleccionada.numero}`);
       }
       
       setCarrito([]);
@@ -399,7 +399,7 @@ function MenuMesero({ usuario, setPagina }) {
             </div>
 
             <button className="vc-btn-enviar" onClick={crearOActualizarPedido} disabled={enviando || cargandoPedido}>
-              {enviando ? (editandoPedidoId ? "Actualizando..." : "Creando...") : (editandoPedidoId ? "✏️ Actualizar Pedido" : "✓ Crear Pedido")}
+              {enviando ? (editandoPedidoId ? "Actualizando..." : "Creando...") : (editandoPedidoId ? "✏️ Actualizar Pedido" : "✓ Crear Pedido (PENDIENTE)")}
             </button>
           </div>
         </section>

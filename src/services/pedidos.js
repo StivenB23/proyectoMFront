@@ -7,7 +7,7 @@ export const CATEGORIAS = [
   { id: 4, nombre: "Bebidas" },
 ];
 
-const normalizarEstadoPedido = (estado = "") => estado.toLowerCase();
+const normalizarEstadoPedido = (estado = "") => String(estado).toUpperCase();
 
 export const normalizarDetalle = (detalle) => {
   const categoriaId = detalle?.platillo?.categoria_id || detalle?.categoria_id || 0;
@@ -56,15 +56,9 @@ export const obtenerTodosLosPedidos = async () => {
   return pedidosPorMesa.flat();
 };
 
-// Cambiar estado del pedido (CERRADO, CANCELADO)
+// Cambiar estado del pedido (COCINANDO, PARA_ENTREGA, ENTREGADO, PAGADO, CERRADO, CANCELADO)
 export const cambiarEstadoPedido = async (pedidoId, estado) => {
   const res = await api.patch(`/mesas/pedidos/${pedidoId}/estado`, { estado });
-  return res.data?.datos || null;
-};
-
-// Marcar pedido como entregado por cocina
-export const marcarPedidoEntregado = async (pedidoId) => {
-  const res = await api.patch(`/mesas/pedidos/${pedidoId}/entregar`, {});
   return res.data?.datos || null;
 };
 

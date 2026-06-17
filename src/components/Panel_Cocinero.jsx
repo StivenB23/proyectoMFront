@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import api from "../services/api";
-import { marcarPedidoEntregado } from "../services/pedidos";
+import { cambiarEstadoPedido } from "../services/pedidos";
 import '../styles/Cocinero.css';
 import '../App.css';
 
 function Panel_Cocinero({ usuario, setPagina }) {
   const [pedidosCocina, setPedidosCocina] = useState([]);
   const [cargando, setCargando] = useState(true);
-  const [marcandoEntregado, setMarcandoEntregado] = useState(null);
+  const [procesandoPedidoId, setProcesandoPedidoId] = useState(null);
 
   if (!usuario) {
     const usuarioGuardado = JSON.parse(localStorage.getItem("usuario"));
@@ -33,19 +33,30 @@ function Panel_Cocinero({ usuario, setPagina }) {
     }
   };
 
-  const marcarComoEntregado = async (pedidoId) => {
-    if (!pedidoId) return;
-    
-    setMarcandoEntregado(pedidoId);
+  const cambiarEstadoDesdeCocina = async (pedidoId, estado) => {
+    if (!pedidoId || !estado) return;
+
+    setProcesandoPedidoId(pedidoId);
     try {
-      await marcarPedidoEntregado(pedidoId);
-      // Refresca la lista inmediatamente después de cambiar estado
+      await cambiarEstadoPedido(pedidoId, estado);
       await cargarPedidosCocina();
     } catch (error) {
-      alert(error?.response?.data?.error || "No se pudo marcar el pedido como entregado");
+      alert(error?.response?.data?.error || "No se pudo actualizar el estado del pedido");
     } finally {
-      setMarcandoEntregado(null);
+      setProcesandoPedidoId(null);
     }
+  };
+
+  const normalizarEstado = (estado = "") => String(estado).toUpperCase();
+
+  const accionCocina = (estadoActual) => {
+    if (estadoActual === "PENDIENTE") {
+      return { estado: "COCINANDO", texto: "INICIAR COCINANDO" };
+    }
+    if (estadoActual === "COCINANDO") {
+      return { estado: "PARA_ENTREGA", texto: "MARCAR PARA_ENTREGA" };
+    }
+    return null;
   };
 
   const formatearTiempo = (minutos) => {
@@ -69,7 +80,7 @@ function Panel_Cocinero({ usuario, setPagina }) {
       </header>
 
       <div className="kitchen-board">
-        <h2 className="kitchen-subtitle">ÓRDENES PENDIENTES POR ENTREGAR</h2>
+        <h2 className="kitchen-subtitle">ÓRDENES ACTIVAS EN COCINA</h2>
 
         {cargando ? (
           <div className="kitchen-loading">
@@ -83,6 +94,13 @@ function Panel_Cocinero({ usuario, setPagina }) {
           <div className="kitchen-orders-grid">
             {pedidosCocina.map((pedido) => (
               <div key={pedido.id} className="kitchen-order-card">
+                {(() => {
+                  const estadoActual = normalizarEstado(pedido.estado);
+                  const accion = accionCocina(estadoActual);
+                  const procesando = procesandoPedidoId === pedido.id;
+
+                  return (
+                    <>
                 
                 {/* Header: Mesa, Mesero, Tiempo */}
                 <div className="kitchen-order-header">
@@ -96,6 +114,7 @@ function Panel_Cocinero({ usuario, setPagina }) {
                     <span className={`kitchen-tiempo ${Number(pedido.minutos_abierto || 0) > 20 ? "alerta" : ""}`}>
                       ⏱ {formatearTiempo(pedido.minutos_abierto || 0)}
                     </span>
+                    <span className="kitchen-mesero">Estado: {estadoActual || "N/A"}</span>
                   </div>
                 </div>
 
@@ -118,16 +137,25 @@ function Panel_Cocinero({ usuario, setPagina }) {
                   )}
                 </div>
 
-                {/* Footer: Botón Entregado */}
+                {/* Footer: Botones de flujo cocina */}
                 <div className="kitchen-order-footer">
-                  <button
-                    className="kitchen-btn-entregado"
-                    onClick={() => marcarComoEntregado(pedido.id)}
-                    disabled={marcandoEntregado === pedido.id}
-                  >
-                    {marcandoEntregado === pedido.id ? "Procesando..." : "✓ LISTO PARA ENTREGAR"}
-                  </button>
+                  {accion ? (
+                    <button
+                      className="kitchen-btn-entregado"
+                      onClick={() => cambiarEstadoDesdeCocina(pedido.id, accion.estado)}
+                      disabled={procesando}
+                    >
+                      {procesando ? "Procesando..." : accion.texto}
+                    </button>
+                  ) : (
+                    <button className="kitchen-btn-entregado" disabled>
+                      SIN ACCIÓN EN COCINA
+                    </button>
+                  )}
                 </div>
+                    </>
+                  );
+                })()}
               </div>
             ))}
           </div>

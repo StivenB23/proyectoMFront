@@ -13,7 +13,7 @@ function MensajeCliente({ setPagina }) {
   const cargarPedidos = async () => {
     try {
       const pedidos = await obtenerTodosLosPedidos();
-      setPedidosAgrupados(pedidos.filter((p) => p.estadoPedido === "abierto"));
+      setPedidosAgrupados(pedidos.filter((p) => p.estadoPedido === "PENDIENTE"));
     } catch (error) {
       console.error("Error cargando pedidos", error);
     }

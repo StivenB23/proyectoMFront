@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import '../styles/MensajeCocina.css';
 import '../App.css';
-import { obtenerTodosLosPedidos } from "../services/pedidos";
+import { obtenerTodosLosPedidos, cambiarEstadoPedido } from "../services/pedidos";
 
 function MensajeCocina({ usuario, setPagina }) {
   const [pedidosListos, setPedidosListos] = useState([]);
+  const [pedidoProcesando, setPedidoProcesando] = useState(null);
 
   if (!usuario) {
     const usuarioGuardado = JSON.parse(localStorage.getItem("usuario"));
@@ -18,14 +19,24 @@ function MensajeCocina({ usuario, setPagina }) {
   const cargarNotificacionesCocina = async () => {
     try {
       const pedidos = await obtenerTodosLosPedidos();
-      setPedidosListos(pedidos.filter((p) => p.estadoPedido === "cerrado"));
+      setPedidosListos(pedidos.filter((p) => p.estadoPedido === "PARA_ENTREGA"));
     } catch (error) {
       console.error("Error cargando pedidos listos:", error);
     }
   };
 
-  const entregarPedido = async () => {
-    alert("Este backend no expone endpoint para cambiar estado del pedido en la documentación actual.");
+  const entregarPedido = async (pedidoId) => {
+    if (!pedidoId) return;
+    setPedidoProcesando(pedidoId);
+    try {
+      await cambiarEstadoPedido(pedidoId, "ENTREGADO");
+      await cargarNotificacionesCocina();
+      alert("Pedido marcado como ENTREGADO.");
+    } catch (error) {
+      alert(error?.response?.data?.error || "No se pudo marcar el pedido como ENTREGADO.");
+    } finally {
+      setPedidoProcesando(null);
+    }
   };
 
   return (
@@ -50,7 +61,7 @@ function MensajeCocina({ usuario, setPagina }) {
 
               <div className="mco-card-header">
                 <span className="mco-badge-mesa">MESA {pedido.mesa}</span>
-                <span className="mco-badge-listo">¡LISTO!</span>
+                <span className="mco-badge-listo">PARA_ENTREGA</span>
                 <span className="mco-total">${pedido.totalPagar?.toLocaleString("es-CO")}</span>
               </div>
 
@@ -95,9 +106,10 @@ function MensajeCocina({ usuario, setPagina }) {
               <div className="mco-card-footer">
                 <button
                   className="mco-btn-entregar"
-                  onClick={() => entregarPedido()}
+                  onClick={() => entregarPedido(pedido.id)}
+                  disabled={pedidoProcesando === pedido.id}
                 >
-                  Confirmar Entrega en Mesa
+                  {pedidoProcesando === pedido.id ? "Procesando..." : "Confirmar ENTREGADO"}
                 </button>
               </div>
 

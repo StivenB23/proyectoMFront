@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import api from "../services/api";
 import { obtenerMesas, obtenerTodosLosPedidos, cambiarEstadoPedido, liberarMesa as liberarMesaServicio } from "../services/pedidos";
 
+const normalizarEstado = (estado = "") => String(estado).toUpperCase();
+
 function Panel_Mesero({ usuario, setPagina }) {
   const [mesas, setMesas] = useState([]);
   const [countClientes, setCountClientes] = useState(0);
@@ -26,8 +28,13 @@ function Panel_Mesero({ usuario, setPagina }) {
       ]);
 
       setMesas(mesasData);
-      setCountClientes(pedidos.filter((p) => p.estadoPedido === "abierto").length);
-      setCountCocina(pedidos.filter((p) => p.estadoPedido === "cerrado").length);
+      setCountClientes(pedidos.filter((p) => normalizarEstado(p.estadoPedido) === "PARA_ENTREGA").length);
+      setCountCocina(
+        pedidos.filter((p) => {
+          const estado = normalizarEstado(p.estadoPedido);
+          return estado === "PENDIENTE" || estado === "COCINANDO";
+        }).length
+      );
     } catch (error) {
       console.error("Error al cargar datos del panel:", error);
     }
@@ -72,7 +79,11 @@ function Panel_Mesero({ usuario, setPagina }) {
     setActualizandoEstado(true);
     try {
       await cambiarEstadoPedido(pedidoActivo.id, estado);
-      alert(`Pedido ${estado === "CERRADO" ? "cerrado" : "cancelado"} correctamente.`);
+      if (estado === "PAGADO") {
+        alert("Pedido pagado. La mesa se liberó automáticamente.");
+      } else {
+        alert(`Pedido actualizado a estado ${estado}.`);
+      }
       setPedidoActivo(null);
       setMesaPedidoActiva(null);
       cargarDatosPanel();
@@ -85,6 +96,11 @@ function Panel_Mesero({ usuario, setPagina }) {
 
   const editarPedido = () => {
     if (!mesaPedidoActiva) return;
+    const estadoActual = normalizarEstado(pedidoActivo?.estado);
+    if (estadoActual !== "PENDIENTE") {
+      alert("Solo puedes editar pedidos en estado PENDIENTE.");
+      return;
+    }
     localStorage.setItem("mesaSeleccionada", mesaPedidoActiva.numero);
     localStorage.setItem("mesaSeleccionadaId", String(mesaPedidoActiva.id));
     localStorage.setItem("pedidoIdEditar", String(pedidoActivo.id));
@@ -192,8 +208,12 @@ function Panel_Mesero({ usuario, setPagina }) {
             </div>
 
             <div className="emp-modal-body">
+              {(() => {
+                const estadoActual = normalizarEstado(pedidoActivo.estado);
+                return (
+                  <>
               <p><strong>ID Pedido:</strong> {pedidoActivo.id}</p>
-              <p><strong>Estado:</strong> {pedidoActivo.estado}</p>
+              <p><strong>Estado:</strong> {estadoActual}</p>
               <p><strong>Total:</strong> ${Number(pedidoActivo.total || 0).toLocaleString("es-CO")}</p>
 
               <div style={{ marginTop: "0.8rem" }}>
@@ -210,6 +230,9 @@ function Panel_Mesero({ usuario, setPagina }) {
                   </div>
                 ))}
               </div>
+                  </>
+                );
+              })()}
             </div>
 
             <div className="emp-modal-footer" style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap" }}>
@@ -226,24 +249,36 @@ function Panel_Mesero({ usuario, setPagina }) {
               <button
                 style={{ background: "#3b82f6", color: "white", border: "none", borderRadius: "6px", padding: "0.6rem 1rem", cursor: "pointer", fontWeight: "bold", flex: "1", minWidth: "120px" }}
                 onClick={editarPedido}
-                disabled={actualizandoEstado}
+                disabled={actualizandoEstado || normalizarEstado(pedidoActivo.estado) !== "PENDIENTE"}
               >
                 ✏️ Editar Pedido
               </button>
               <button
                 className="emp-btn-eliminar-modal"
                 onClick={() => actualizarEstadoPedido("CANCELADO")}
-                disabled={actualizandoEstado}
+                disabled={actualizandoEstado || normalizarEstado(pedidoActivo.estado) !== "PENDIENTE"}
               >
                 {actualizandoEstado ? "Procesando..." : "Cancelar Pedido"}
               </button>
-              <button
-                className="emp-btn-guardar"
-                onClick={() => actualizarEstadoPedido("CERRADO")}
-                disabled={actualizandoEstado}
-              >
-                {actualizandoEstado ? "Procesando..." : "✓ Cerrar Pedido"}
-              </button>
+              {normalizarEstado(pedidoActivo.estado) === "PARA_ENTREGA" && (
+                <button
+                  className="emp-btn-guardar"
+                  onClick={() => actualizarEstadoPedido("ENTREGADO")}
+                  disabled={actualizandoEstado}
+                >
+                  {actualizandoEstado ? "Procesando..." : "✓ Marcar ENTREGADO"}
+                </button>
+              )}
+              {normalizarEstado(pedidoActivo.estado) === "ENTREGADO" && (
+                <button
+                  className="emp-btn-guardar"
+                  onClick={() => actualizarEstadoPedido("PAGADO")}
+                  disabled={actualizandoEstado}
+                  style={{ background: "#10b981" }}
+                >
+                  {actualizandoEstado ? "Procesando..." : "✓ PAGADO Y LIBERAR"}
+                </button>
+              )}
             </div>
           </div>
         </div>
