@@ -8,6 +8,8 @@ import Empleados from './components/Admin/Empleados'
 import Platos from './components/Admin/Platos'
 import Menus from './components/Admin/Menus'
 import MenuDia from './components/MenuDia'
+import MenuMesero from './components/MenuMesero'
+import EditarPedido from './components/EditarPedido'
 import Recuperacion from './components/Recuperacion'
 import MensajeCliente from './components/MensajeCliente'
 import MensajeCocina from './components/MensajeCocina'
@@ -23,17 +25,17 @@ function App() {
     if (!usuarioGuardado) return
 
     const paginaGuardada = localStorage.getItem("paginaActual")
-    const redireccion = {
-      1: "mesero", 3: "mesero", 4: "mesero",
-      2: "cocinero",
-      5: "admin"
+    const redireccionPorRol = {
+      Mesero: "mesero",
+      Cocinero: "cocinero",
+      Administrador: "admin",
     }
 
     setUsuario(usuarioGuardado)
     if (paginaGuardada && !PAGINAS_PUBLICAS.includes(paginaGuardada)) {
       setPagina(paginaGuardada)
     } else {
-      setPagina(redireccion[usuarioGuardado.Roles_usuariosId] ?? "login")
+      setPagina(redireccionPorRol[usuarioGuardado.rol] ?? "login")
     }
   }, [])
 
@@ -41,6 +43,7 @@ function App() {
     if (PAGINAS_PUBLICAS.includes(nuevaPagina)) {
       localStorage.removeItem("paginaActual")
       localStorage.removeItem("usuario")
+      localStorage.removeItem("token")
     } else {
       localStorage.setItem("paginaActual", nuevaPagina)
     }
@@ -54,12 +57,14 @@ function App() {
       {pagina === "login" && <Login setPagina={cambiarPagina} setUsuario={setUsuario} />}
       {pagina === "vistacliente" && <VistaCliente {...props} />}
       {pagina === "mesero" && <Panel_Mesero {...props} />}
-      {pagina === "cocinero" && <Panel_Cocinero setPagina={cambiarPagina} />}
+      {pagina === "cocinero" && <Panel_Cocinero {...props} />}
       {pagina === "admin" && <Panel_Administrador {...props} />}
       {pagina === "empleados" && <Empleados {...props} />}
       {pagina === "platos" && <Platos {...props} />}
       {pagina === "menus" && <Menus {...props} />}
       {pagina === "menu" && <MenuDia {...props} />}
+      {pagina === "menuMesero" && <MenuMesero {...props} />}
+      {pagina === "editarPedido" && <EditarPedido {...props} />}
       {pagina === "recuperacion" && <Recuperacion setPagina={cambiarPagina} />}
       {pagina === "mensajecliente" && <MensajeCliente setPagina={cambiarPagina} />}
       {pagina === "mensajecocina" && <MensajeCocina setPagina={cambiarPagina} />}

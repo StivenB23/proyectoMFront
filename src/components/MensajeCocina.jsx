@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import '../../Hojas_de_Estilo/MensajeCocina.css';
+import '../styles/MensajeCocina.css';
 import '../App.css';
+import { obtenerTodosLosPedidos } from "../services/pedidos";
 
 function MensajeCocina({ usuario, setPagina }) {
   const [pedidosListos, setPedidosListos] = useState([]);
@@ -17,33 +17,15 @@ function MensajeCocina({ usuario, setPagina }) {
 
   const cargarNotificacionesCocina = async () => {
     try {
-      const resPedidos = await axios.get("http://localhost:3000/Pedido?estadoPedido=listo");
-      const resDetalles = await axios.get("http://localhost:3000/Detalle_pedidos");
-
-      // Agrupar detalles por pedido
-      const agrupados = resPedidos.data.map(pedido => {
-        const detalles = resDetalles.data.filter(d => d.PedidoId === pedido.id);
-        const platos = detalles.filter(d => d.CategoriaId !== "4");
-        const bebidas = detalles.filter(d => d.CategoriaId === "4");
-        return { ...pedido, detalles, platos, bebidas };
-      });
-
-      setPedidosListos(agrupados);
+      const pedidos = await obtenerTodosLosPedidos();
+      setPedidosListos(pedidos.filter((p) => p.estadoPedido === "cerrado"));
     } catch (error) {
       console.error("Error cargando pedidos listos:", error);
     }
   };
 
-  const entregarPedido = async (id) => {
-    try {
-      await axios.patch(`http://localhost:3000/Pedido/${id}`, {
-        estadoPedido: "entregado"
-      });
-      alert("¡Pedido entregado en mesa!");
-      cargarNotificacionesCocina();
-    } catch (error) {
-      console.error("Error al entregar pedido:", error);
-    }
+  const entregarPedido = async () => {
+    alert("Este backend no expone endpoint para cambiar estado del pedido en la documentación actual.");
   };
 
   return (
@@ -113,7 +95,7 @@ function MensajeCocina({ usuario, setPagina }) {
               <div className="mco-card-footer">
                 <button
                   className="mco-btn-entregar"
-                  onClick={() => entregarPedido(pedido.id)}
+                  onClick={() => entregarPedido()}
                 >
                   Confirmar Entrega en Mesa
                 </button>

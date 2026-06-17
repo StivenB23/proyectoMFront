@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════
    MENU DEL DÍA — VISTA MESERO
    Importar en Menu.jsx:
-   import '../../Hojas_de_Estilo/MenuDia.css';
+  import '../styles/MenuDia.css';
    ══════════════════════════════════════════════ */
 
 /* ── Contenedor principal ── */

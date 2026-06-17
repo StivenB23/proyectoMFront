@@ -1,5 +1,4 @@
 import { useState } from "react"
-import axios from "axios"
 import '../App.css';
 
 function Recuperacion({ setPagina }) {
@@ -9,19 +8,12 @@ function Recuperacion({ setPagina }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-
-    const respuesta = await axios.get("http://localhost:3000/usuarios_restaurante")
-    const usuarios = respuesta.data
-
-    const usuarioEncontrado = usuarios.find(
-      (u) => u.nombre === user)
-
-    if (!usuarioEncontrado) {
-      setMensaje("Usuario no encontrado")
+    if (!user.trim()) {
+      setMensaje("Ingresa tu usuario o correo")
       return
     }
 
-    setMensaje("Tu contraseña es: " + usuarioEncontrado.contraseña)
+    setMensaje("Recuperación no disponible por API en esta versión. Contacta al administrador para restablecer la clave.")
   }
 
   return (

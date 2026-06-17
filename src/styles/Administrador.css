@@ -114,6 +114,10 @@
     gap: 20px;
 }
 
+.stats-row-extended {
+    grid-template-columns: repeat(4, 1fr);
+}
+
 .stat-card {
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid #d48037;
@@ -286,6 +290,16 @@
     background: rgba(255, 255, 255, 0.08);
 }
 
+.emp-card-inactivo {
+    opacity: 0.68;
+    background: rgba(120, 120, 120, 0.08);
+    border-color: rgba(180, 180, 180, 0.22);
+}
+
+.emp-card-inactivo:hover {
+    background: rgba(120, 120, 120, 0.12);
+}
+
 /* ── Avatar ── */
 .emp-card-avatar {
     width: 64px;
@@ -337,6 +351,27 @@
     font-weight: bold;
     color: #000000;
     letter-spacing: 1px;
+}
+
+.emp-card-estado {
+    display: inline-block;
+    margin-top: 6px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 0.68rem;
+    font-weight: bold;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.emp-card-estado-activo {
+    background: rgba(46, 204, 113, 0.18);
+    color: #7dffb2;
+}
+
+.emp-card-estado-inactivo {
+    background: rgba(255, 255, 255, 0.12);
+    color: #d0d0d0;
 }
 
 /* ── Estados ── */
@@ -421,6 +456,17 @@
     color: #ffffff;
 }
 
+.emp-btn-reactivar {
+    background: rgba(46, 204, 113, 0.14);
+    color: #2ecc71;
+    min-width: 92px;
+}
+
+.emp-btn-reactivar:hover {
+    background: #2ecc71;
+    color: #08130d;
+}
+
 /* ── Modal de confirmacion eliminar ── */
 .emp-modal-confirmar {
     width: 400px;
@@ -465,6 +511,15 @@
 .emp-btn-eliminar-modal:hover    { background: #c0392b; }
 .emp-btn-eliminar-modal:disabled { opacity: 0.5; cursor: not-allowed; }
 
+.emp-btn-reactivar-modal {
+    background: #2ecc71;
+    color: #08130d;
+}
+
+.emp-btn-reactivar-modal:hover {
+    background: #27ae60;
+}
+
 /* ── Overlay del modal ── */
 .emp-modal-overlay {
     position: fixed;
@@ -496,6 +551,16 @@
 /* ── Modal de creacion (ancho ligeramente mayor) ── */
 .emp-modal-crear {
     width: 460px;
+}
+
+.emp-modal-scroll {
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.emp-modal-scroll .emp-modal-body {
+    overflow-y: auto;
 }
 
 /* ── Header del modal ── */
@@ -896,6 +961,41 @@
     max-height: 65vh;
     overflow-y: auto;
     padding-right: 4px;
+}
+
+@media (max-width: 1200px) {
+    .stats-row-extended {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 900px) {
+    .main-stats-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 640px) {
+    .stats-row,
+    .stats-row-extended {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-content-area {
+        padding: 20px;
+    }
+
+    .emp-modal,
+    .emp-modal-crear {
+        width: 95vw;
+        max-width: 95vw;
+    }
+
+    .emp-modal-footer {
+        position: sticky;
+        bottom: 0;
+        background: #1a1a1a;
+    }
 }
 
 .menus-platos-lista::-webkit-scrollbar { width: 4px; }

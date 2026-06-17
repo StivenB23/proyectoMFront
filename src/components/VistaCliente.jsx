@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import axios from "axios";
-import '../../Hojas_de_Estilo/Cliente.css';
+import api, { construirUrlImagen } from "../services/api";
+import { obtenerMenuDia } from "../services/menuDia";
+import '../styles/Cliente.css';
 import '../App.css';
 
 const IMG_CATEGORIA = {
@@ -12,12 +13,14 @@ const IMG_CATEGORIA = {
 
 const TarjetaPlato = ({ plato, agregado, expandida, cantidad, peticion, 
   onTogglePlato, onCambiarCantidad, onToggleCarrito, onCambiarPeticion }) => {
+  const imagenPlato = construirUrlImagen(plato.imagen_url) || (IMG_CATEGORIA[plato.CategoriaId] ?? "/CartaCorriente.png");
+
   return (
     <div className={`vc-tarjeta ${agregado ? "vc-tarjeta-agregada" : ""}`}>
       <div className="vc-tarjeta-fila" onClick={() => onTogglePlato(plato)}>
         <div className="vc-tarjeta-img-wrap">
           <img
-            src={IMG_CATEGORIA[plato.CategoriaId] ?? "/CartaCorriente.png"}
+            src={imagenPlato}
             alt={plato.NombrePlato}
             className="vc-tarjeta-img"
           />
@@ -68,10 +71,20 @@ function VistaCliente({ setPagina }) {
   const [platoAbierto, setPlatoAbierto] = useState(null)
 
   useEffect(() => {
-    const menuGuardado = localStorage.getItem("menuDelDia")
-    if (menuGuardado) setMenuDelDia(JSON.parse(menuGuardado))
-    const mesaGuardada = localStorage.getItem("mesa_activa")
-    if (mesaGuardada) setMesaActiva(mesaGuardada)
+    const cargarVistaCliente = async () => {
+      const mesaGuardada = localStorage.getItem("mesa_activa")
+      if (mesaGuardada) setMesaActiva(mesaGuardada)
+
+      try {
+        const menuDia = await obtenerMenuDia("hoy")
+        setMenuDelDia(menuDia)
+      } catch (error) {
+        console.error("No se pudo cargar el menú:", error)
+        setMenuDelDia([])
+      }
+    }
+
+    cargarVistaCliente()
   }, [])
 
   const platosMenu  = menuDelDia.filter(p => p.CategoriaId !== "4")
@@ -113,36 +126,23 @@ function VistaCliente({ setPagina }) {
 
   const formatPrecio = (precio) => `$${precio.toLocaleString("es-CO")}`
 
-  // UN solo pedido con todos los detalles adentro
   const enviarPedido = async () => {
     if (carrito.length === 0) return
+    if (!mesaActiva) {
+      alert("No hay mesa activa para este cliente. Solicita apoyo del mesero.")
+      return
+    }
+
     setEnviando(true)
     try {
-      const totalGeneral = carrito.reduce((acc, item) => acc + item.plato.Precio * item.cantidad, 0)
+      const items = carrito.map((item) => ({
+        platillo_id: item.plato.id,
+        cantidad: item.cantidad,
+      }))
 
-      // 1 solo pedido
-      const resPedido = await axios.post("http://localhost:3000/Pedido", {
-        mesa: mesaActiva,
-        fecha_pedido: new Date().toLocaleString(),
-        estadoPedido: "esperando_mesero",
-        totalPagar: totalGeneral
-      })
+      await api.post(`/mesas/${mesaActiva}/pedidos`, { items })
 
-      const pedidoId = resPedido.data.id
-
-      // Todos los detalles apuntando al mismo PedidoId
-      for (const item of carrito) {
-        await axios.post("http://localhost:3000/Detalle_pedidos", {
-          PedidoId: pedidoId,
-          PlatoId: item.plato.id,
-          NombrePlato: item.plato.NombrePlato,
-          cantidadPedido: item.cantidad,
-          notasEspeciales: item.peticion,
-          CategoriaId: item.plato.CategoriaId,
-          precioFinal: item.plato.Precio * item.cantidad
-        })
-      }
-
+      localStorage.setItem("mesa_activa", String(mesaActiva))
       setCarrito([])
       setCantidades({})
       setPeticiones({})
@@ -175,7 +175,7 @@ function VistaCliente({ setPagina }) {
   return (
     <div className="vc-container">
       <header className="vc-header">
-        <span className="vc-badge-mesa">Mesa #{mesaActiva}</span>
+        <span className="vc-badge-mesa">{mesaActiva ? `Mesa #${mesaActiva}` : "Mesa sin asignar"}</span>
         <div className="vc-header-center">
           <h1 className="vc-logo">Restaurante Mangata</h1>
           <p className="vc-menu-dia-label">Menú del Día</p>
@@ -267,7 +267,7 @@ function VistaCliente({ setPagina }) {
           )}
 
           <button className="vc-btn-enviar" onClick={enviarPedido} disabled={enviando}>
-            {enviando ? "Enviando..." : "Enviar"}
+            {enviando ? "Llamando..." : "Llamar mesero"}
           </button>
         </section>
       )}

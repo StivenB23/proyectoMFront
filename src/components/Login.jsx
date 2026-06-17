@@ -1,79 +1,57 @@
-import { useState, useEffect } from "react"
-import axios from "axios"
-import bcrypt from "bcryptjs"
-import '../../Hojas_de_Estilo/Login.css'; // Importamos la nueva hoja de estilo
+import { useState } from "react"
+import api, { normalizarRol } from "../services/api"
+import '../styles/Login.css'; // Importamos la nueva hoja de estilo
 import '../App.css';
 
 function Login({ setPagina, setUsuario }) {
   const [credentials, setCredentials] = useState({ user: "", pass: "" })
-  const [mesas, setMesas] = useState([]);
-  const [mesaSeleccionada, setMesaSeleccionada] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    const usuarios = (await axios.get("http://localhost:3000/users")).data
+    try {
+      const res = await api.post("/usuarios/login", {
+        email: credentials.user,
+        password: credentials.pass,
+      })
 
-    const usuarioEncontrado = usuarios.find((u) => u.email === credentials.user)
+      const token = res.data?.token
+      const usuarioBackend = res.data?.usuario
 
-    if (!usuarioEncontrado) {
-      alert("Usuario no encontrado")
-      return
-    }
+      if (!token || !usuarioBackend) {
+        alert("Respuesta inválida del servidor")
+        return
+      }
 
-    const passwordValida = await bcrypt.compare(credentials.pass, usuarioEncontrado.password)
+      const usuarioNormalizado = {
+        ...usuarioBackend,
+        rol: normalizarRol(usuarioBackend.rol),
+      }
 
-    if (!passwordValida) {
-      alert("contraseña incorrecta")
-      return
-    }
+      localStorage.setItem("token", token)
+      localStorage.setItem("usuario", JSON.stringify(usuarioNormalizado))
+      setUsuario(usuarioNormalizado)
 
-    const rolUsuario = usuarioEncontrado.rol
-    localStorage.setItem("usuario", JSON.stringify(usuarioEncontrado))
-    setUsuario(usuarioEncontrado)
-
-    if (rolUsuario === "Mesero") {
-      setPagina("mesero")
-    } else if (rolUsuario === "Cocinero") {
-      setPagina("cocinero")
-    } else if (rolUsuario === "Administrador") {
-      setPagina("admin")
-    } else {
-      alert("Rol no permitido")
+      if (usuarioNormalizado.rol === "Mesero") {
+        setPagina("mesero")
+      } else if (usuarioNormalizado.rol === "Cocinero") {
+        setPagina("cocinero")
+      } else if (usuarioNormalizado.rol === "Administrador") {
+        setPagina("admin")
+      } else {
+        alert("Rol no permitido")
+      }
+    } catch (error) {
+      alert(error.response?.data?.error || "No se pudo iniciar sesión")
     }
   }
 
-  useEffect(() => {
-    const obtenerMesas = async () => {
-      try {
-        const res = await axios.get("http://localhost:3000/Mesas");
-        setMesas(res.data);
-      } catch (error) {
-        console.error("Error al traer mesas:", error);
-      }
-    };
-    obtenerMesas();
-  }, []);
-
   const handleIngresoCliente = async (e) => {
     e.preventDefault();
-    if (!mesaSeleccionada) {
-      alert("Por favor, selecciona una mesa primero");
-      return;
-    }
-
-    try {
-      const mesaEncontrada = mesas.find(m => m.numero.toString() === mesaSeleccionada.toString());
-      if (mesaEncontrada) {
-        await axios.patch(`http://localhost:3000/Mesas/${mesaEncontrada.id}`, {
-          estado: "ocupada"
-        });
-      }
-      localStorage.setItem("mesa_activa", mesaSeleccionada);
-      setPagina("vistacliente");
-    } catch (error) {
-      console.error("Error al actualizar la mesa:", error);
-      alert("No se pudo conectar con el servidor para asignar la mesa.");
-    }
+    localStorage.removeItem("token");
+    localStorage.removeItem("usuario");
+    localStorage.removeItem("paginaActual");
+    localStorage.removeItem("mesa_activa");
+    setPagina("vistacliente");
   };
 
   return (
@@ -108,22 +86,9 @@ function Login({ setPagina, setUsuario }) {
       {/* FORMULARIO CLIENTE */}
       <form className="login-form-client" onSubmit={handleIngresoCliente}>
         <h2 className="login-title-client">Menú Digital - Cliente</h2>
-        
-        <select 
-          value={mesaSeleccionada} 
-          onChange={(e) => setMesaSeleccionada(e.target.value)}
-          className="login-select-client"
-        >
-          <option value="">-- Elige tu Mesa --</option>
-          {mesas.map((m) => (
-            <option key={m.id} value={m.numero} disabled={m.estado === "ocupada"}>
-              Mesa #{m.numero} {m.estado === "ocupada" ? "(Ocupada)" : ""}
-            </option>
-          ))}
-        </select>
 
         <button type="submit" className="login-button-client">
-          Ver Menú y Ordenar
+          Ver Menú
         </button>
       </form>
     </div>

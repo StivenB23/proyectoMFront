@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { construirUrlImagen } from '../services/api';
+import { obtenerMenuDia } from '../services/menuDia';
 import '../App.css';
-import '../../Hojas_de_Estilo/MenuDia.css';
+import '../styles/MenuDia.css';
 
 const IMG_CATEGORIA = {
   "1": "/CartaCorriente.png",
@@ -14,11 +16,19 @@ function MenuDia({ setPagina }) {
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    const menuGuardado = localStorage.getItem("menuDelDia");
-    if (menuGuardado) {
-      setMenuDelDia(JSON.parse(menuGuardado));
-    }
-    setCargando(false);
+    const cargarMenu = async () => {
+      try {
+        const menu = await obtenerMenuDia("hoy");
+        setMenuDelDia(menu);
+      } catch (error) {
+        console.error("No se pudo cargar el menu del dia:", error);
+        setMenuDelDia([]);
+      } finally {
+        setCargando(false);
+      }
+    };
+
+    cargarMenu();
   }, []);
 
   const menuPlatos = menuDelDia.filter(p => p.CategoriaId !== "4");
@@ -56,7 +66,7 @@ function MenuDia({ setPagina }) {
                 {menuPlatos.map((plato, i) => (
                   <div key={i} className="menu-plato-card">
                     <img
-                      src={IMG_CATEGORIA[plato.CategoriaId] ?? "/CartaCorriente.png"}
+                      src={construirUrlImagen(plato.imagen_url) || (IMG_CATEGORIA[plato.CategoriaId] ?? "/CartaCorriente.png")}
                       alt={plato.NombrePlato}
                       className="menu-plato-img"
                     />
@@ -78,7 +88,7 @@ function MenuDia({ setPagina }) {
                 {menuBebidas.map((plato, i) => (
                   <div key={i} className="menu-plato-card">
                     <img
-                      src={IMG_CATEGORIA["4"]}
+                      src={construirUrlImagen(plato.imagen_url) || IMG_CATEGORIA["4"]}
                       alt={plato.NombrePlato}
                       className="menu-plato-img"
                     />

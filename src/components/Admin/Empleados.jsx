@@ -1,86 +1,135 @@
 import { useEffect, useState } from "react"
-import axios from "axios"
-import bcrypt from "bcryptjs"
-import '../../../Hojas_de_Estilo/Administrador.css';
+import api, { normalizarRol } from "../../services/api"
+import '../../styles/Administrador.css';
 import '../../App.css';
 
-function Empleados() {
+function Empleados({ usuario }) {
     const [empleados, setEmpleados] = useState([])
     const [cargando, setCargando] = useState(true)
     const [error, setError] = useState(null)
     const [empleadoEditando, setEmpleadoEditando] = useState(null)  // empleado seleccionado para editar
-    const [formEdicion, setFormEdicion] = useState({ email: "", rol: "", nuevaPassword: "" })
+    const [formEdicion, setFormEdicion] = useState({ nombre: "", apellido: "", email: "", rol: "", nuevaPassword: "" })
     const [guardando, setGuardando] = useState(false)
     const [mensaje, setMensaje] = useState(null)  // feedback de exito/error
 
-    // ── Estado para eliminar usuario ──
-    const [empleadoAEliminar, setEmpleadoAEliminar] = useState(null)
-    const [eliminando, setEliminando] = useState(false)
+    // ── Estado para activar/inactivar usuario ──
+    const [empleadoEstadoPendiente, setEmpleadoEstadoPendiente] = useState(null)
+    const [actualizandoEstadoUsuario, setActualizandoEstadoUsuario] = useState(false)
 
-    const abrirConfirmacion = (emp) => setEmpleadoAEliminar(emp)
-    const cerrarConfirmacion = () => { if (!eliminando) setEmpleadoAEliminar(null) }
+    // ── Estado para crear usuario en formulario unico ──
+    const [formNuevo, setFormNuevo] = useState({
+        nombre: "",
+        apellido: "",
+        email: "",
+        password: "",
+        rol: "mesero",
+    })
+    const [guardandoNuevo, setGuardandoNuevo] = useState(false)
+    const [mensajeNuevo, setMensajeNuevo] = useState(null)
+    const [modalCrearAbierta, setModalCrearAbierta] = useState(false)
 
-    const eliminarEmpleado = async () => {
-        setEliminando(true)
+    const usuarioActivo = usuario || JSON.parse(localStorage.getItem("usuario") || "null")
+    const esAdministrador = usuarioActivo?.rol === "Administrador"
+    const rolesPermitidos = new Set(["administrador", "mesero", "cocinero"])
+    const rolBackend = { Mesero: "mesero", Cocinero: "cocinero", Administrador: "administrador" }
+
+    const esUsuarioActivo = (empleado) => {
+        if (typeof empleado?.activo === "boolean") return empleado.activo
+        if (typeof empleado?.activo === "number") return empleado.activo === 1
+        if (typeof empleado?.activa === "boolean") return empleado.activa
+        if (typeof empleado?.activa === "number") return empleado.activa === 1
+        if (typeof empleado?.estado === "string") return empleado.estado.toUpperCase() !== "INACTIVO"
+        return true
+    }
+
+    const abrirConfirmacionEstado = (emp) => setEmpleadoEstadoPendiente(emp)
+    const cerrarConfirmacionEstado = () => {
+        if (!actualizandoEstadoUsuario) setEmpleadoEstadoPendiente(null)
+    }
+
+    const cambiarEstadoEmpleado = async () => {
+        if (!esAdministrador) return
+        if (!empleadoEstadoPendiente?.id) return
+
+        const endpoint = esUsuarioActivo(empleadoEstadoPendiente)
+            ? `/usuarios/${empleadoEstadoPendiente.id}/inactivar`
+            : `/usuarios/${empleadoEstadoPendiente.id}/activar`
+
+        setActualizandoEstadoUsuario(true)
         try {
-            await axios.delete(`http://localhost:3000/users/${empleadoAEliminar.id}`)
+            await api.patch(endpoint)
             await obtenerEmpleados()
-            setEmpleadoAEliminar(null)
-        } catch (err) {
-            // si falla simplemente cierra
-            setEmpleadoAEliminar(null)
+            setEmpleadoEstadoPendiente(null)
+        } catch (error_) {
+            setEmpleadoEstadoPendiente(null)
         } finally {
-            setEliminando(false)
+            setActualizandoEstadoUsuario(false)
         }
     }
 
-    // ── Estado para crear nuevo usuario ──
-    const [rolCreando, setRolCreando] = useState(null)  // "Mesero" | "Cocinero" | "Administrador"
-    const [formNuevo, setFormNuevo] = useState({ nombre: "", apellido: "", email: "", password: "" })
-    const [guardandoNuevo, setGuardandoNuevo] = useState(false)
-    const [mensajeNuevo, setMensajeNuevo] = useState(null)
-
-    const rolAId = { "Mesero": 1, "Cocinero": 2, "Administrador": 5 }
-
-    const abrirCreacion = (rol) => {
-        setRolCreando(rol)
-        setFormNuevo({ nombre: "", apellido: "", email: "", password: "" })
-        setMensajeNuevo(null)
-    }
-
-    const cerrarCreacion = () => {
-        setRolCreando(null)
-        setFormNuevo({ nombre: "", apellido: "", email: "", password: "" })
-        setMensajeNuevo(null)
-    }
-
     const crearUsuario = async () => {
-        const { nombre, apellido, email, password } = formNuevo
+        if (!esAdministrador) {
+            setMensajeNuevo({ tipo: "error", texto: "Solo un administrador puede registrar usuarios" })
+            return
+        }
+
+        const { nombre, apellido, email, password, rol } = formNuevo
         if (!nombre.trim() || !apellido.trim() || !email.trim() || !password.trim()) {
             setMensajeNuevo({ tipo: "error", texto: "Todos los campos son obligatorios" })
             return
         }
+        if (password.trim().length < 6) {
+            setMensajeNuevo({ tipo: "error", texto: "La contraseña debe tener al menos 6 caracteres" })
+            return
+        }
+        if (!rolesPermitidos.has(rol)) {
+            setMensajeNuevo({ tipo: "error", texto: "El rol seleccionado no es valido" })
+            return
+        }
+
         setGuardandoNuevo(true)
         try {
-            const hash = await bcrypt.hash(password, 10)
             const nuevoUsuario = {
                 nombre: nombre.trim(),
                 apellido: apellido.trim(),
                 email: email.trim(),
-                password: hash,
-                rol: rolCreando,
-                Roles_usuariosId: rolAId[rolCreando],
-                Tipo_documentoId: 1,
+                password: password.trim(),
+                rol,
             }
-            await axios.post("http://localhost:3000/users", nuevoUsuario)
+
+            await api.post("/usuarios", nuevoUsuario)
             await obtenerEmpleados()
             setMensajeNuevo({ tipo: "ok", texto: "Usuario creado correctamente" })
-            setTimeout(() => cerrarCreacion(), 1400)
+            setFormNuevo({
+                nombre: "",
+                apellido: "",
+                email: "",
+                password: "",
+                rol: "mesero",
+            })
+            setTimeout(() => {
+                setModalCrearAbierta(false)
+                setMensajeNuevo(null)
+            }, 900)
         } catch (err) {
-            setMensajeNuevo({ tipo: "error", texto: "Error al crear el usuario" })
+            setMensajeNuevo({
+                tipo: "error",
+                texto: err?.response?.data?.error || "Error al crear el usuario",
+            })
         } finally {
             setGuardandoNuevo(false)
         }
+    }
+
+    const abrirModalCrear = () => {
+        setMensajeNuevo(null)
+        setModalCrearAbierta(true)
+    }
+
+    const cerrarModalCrear = () => {
+        if (guardandoNuevo) return
+        setModalCrearAbierta(false)
+        setMensajeNuevo(null)
     }
 
     useEffect(() => {
@@ -89,9 +138,14 @@ function Empleados() {
 
     const obtenerEmpleados = async () => {
         try {
-            const res = await axios.get("http://localhost:3000/users")
-            setEmpleados(res.data)
-        } catch (err) {
+            const res = await api.get("/usuarios")
+            const usuarios = (res.data?.datos || []).map((u) => ({
+                ...u,
+                rol: normalizarRol(u.rol),
+                activo: esUsuarioActivo(u),
+            }))
+            setEmpleados(usuarios)
+        } catch (error_) {
             setError("No se pudo conectar con el servidor")
         } finally {
             setCargando(false)
@@ -101,41 +155,46 @@ function Empleados() {
     // Abre el modal con los datos actuales del empleado
     const abrirEdicion = (emp) => {
         setEmpleadoEditando(emp)
-        setFormEdicion({ email: emp.email, rol: emp.rol, nuevaPassword: "" })
+        setFormEdicion({
+            nombre: emp.nombre || "",
+            apellido: emp.apellido || "",
+            email: emp.email || "",
+            rol: emp.rol || "",
+            nuevaPassword: "",
+        })
         setMensaje(null)
     }
 
     const cerrarEdicion = () => {
         setEmpleadoEditando(null)
-        setFormEdicion({ email: "", rol: "", nuevaPassword: "" })
+        setFormEdicion({ nombre: "", apellido: "", email: "", rol: "", nuevaPassword: "" })
         setMensaje(null)
     }
 
     const guardarCambios = async () => {
+        if (!esAdministrador) return
         setGuardando(true)
         try {
             // Arma el objeto con los campos a actualizar
             const cambios = {
+                nombre: formEdicion.nombre.trim(),
+                apellido: formEdicion.apellido.trim(),
                 email: formEdicion.email,
-                rol:   formEdicion.rol,
+                rol: rolBackend[formEdicion.rol],
+                tipo_documento_id: empleadoEditando.tipo_documento_id || 1,
             }
 
-            // Actualiza Roles_usuariosId segun el rol elegido
-            cambios.Roles_usuariosId = rolAId[formEdicion.rol] ?? empleadoEditando.Roles_usuariosId
-
-            // Si escribio nueva contraseña, la encripta antes de guardar
             if (formEdicion.nuevaPassword.trim() !== "") {
-                const hash = await bcrypt.hash(formEdicion.nuevaPassword, 10)
-                cambios.password = hash
+                cambios.password = formEdicion.nuevaPassword
             }
 
-            await axios.patch(`http://localhost:3000/users/${empleadoEditando.id}`, cambios)
+            await api.put(`/usuarios/${empleadoEditando.id}`, cambios)
 
             // Refresca la lista y cierra el modal
             await obtenerEmpleados()
             setMensaje({ tipo: "ok", texto: "Empleado actualizado correctamente" })
             setTimeout(() => cerrarEdicion(), 1200)
-        } catch (err) {
+        } catch (error_) {
             setMensaje({ tipo: "error", texto: "Error al guardar los cambios" })
         } finally {
             setGuardando(false)
@@ -146,14 +205,11 @@ function Empleados() {
     const cocineros = empleados.filter(e => e.rol === "Cocinero")
     const administradores = empleados.filter(e => e.rol === "Administrador")
 
-    const GrupoEmpleados = ({ titulo, lista, className, rol }) => (
+    const GrupoEmpleados = ({ titulo, lista, className }) => (
         <div className={`emp-grupo ${className}`}>
             <h2 className="emp-grupo-titulo">
                 {titulo}
                 <span className="emp-grupo-count">{lista.length}</span>
-
-                <button className="emp-btn-crear-rol" title={`Crear nuevo ${rol}`}
-                onClick={() => abrirCreacion(rol)}>+</button>
             </h2>
 
             {lista.length === 0 ? (
@@ -161,7 +217,7 @@ function Empleados() {
             ) : (
                 <div className="emp-cards-grid">
                     {lista.map(emp => (
-                        <div key={emp.id} className="emp-card">
+                        <div key={emp.id} className={`emp-card ${emp.activo ? "" : "emp-card-inactivo"}`}>
                             <div className="emp-card-avatar">
                                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <circle cx="12" cy="8" r="4" className="emp-avatar-fill" />
@@ -172,13 +228,20 @@ function Empleados() {
                                 <p className="emp-card-nombre">{emp.nombre} {emp.apellido}</p>
                                 <p className="emp-card-email">{emp.email}</p>
                                 <span className="emp-card-badge">{emp.rol}</span>
+                                <span className={`emp-card-estado ${emp.activo ? "emp-card-estado-activo" : "emp-card-estado-inactivo"}`}>
+                                    {emp.activo ? "Activo" : "Desactivado"}
+                                </span>
                             </div>
                             <div className="emp-card-acciones">
-                                <button className="emp-btn-editar" onClick={() => abrirEdicion(emp)}>
+                                <button className="emp-btn-editar" onClick={() => abrirEdicion(emp)} disabled={!esAdministrador}>
                                     Editar
                                 </button>
-                                <button className="emp-btn-eliminar" onClick={() => abrirConfirmacion(emp)}>
-                                    ✕
+                                <button
+                                    className={`emp-btn-eliminar ${emp.activo ? "" : "emp-btn-reactivar"}`}
+                                    onClick={() => abrirConfirmacionEstado(emp)}
+                                    disabled={!esAdministrador}
+                                >
+                                    {emp.activo ? "Desactivar" : "Activar"}
                                 </button>
                             </div>
                         </div>
@@ -196,59 +259,88 @@ function Empleados() {
             <div className="emp-header">
                 <h1 className="emp-titulo-pagina">Gestión de Empleados</h1>
                 <p className="emp-subtitulo">{empleados.length} empleados registrados</p>
+                {!esAdministrador && (
+                    <p className="emp-estado-msg emp-error" style={{ marginTop: "0.5rem" }}>
+                        Solo un administrador puede crear, editar o inactivar usuarios.
+                    </p>
+                )}
+                <div style={{ marginTop: "0.9rem" }}>
+                    <button
+                        className="emp-btn-guardar"
+                        onClick={abrirModalCrear}
+                        disabled={!esAdministrador}
+                        style={{ padding: "0.55rem 0.9rem", fontSize: "0.88rem", width: "auto", minWidth: "140px" }}
+                    >
+                        Crear Usuario
+                    </button>
+                </div>
             </div>
 
-            <GrupoEmpleados titulo="MESEROS" lista={meseros} className="grupo-mesero"   rol="Mesero" />
-            <GrupoEmpleados titulo="COCINEROS" lista={cocineros} className="grupo-cocinero" rol="Cocinero" />
-            <GrupoEmpleados titulo="ADMINISTRADORES" lista={administradores} className="grupo-admin"    rol="Administrador" />
+            <GrupoEmpleados titulo="MESEROS" lista={meseros} className="grupo-mesero" />
+            <GrupoEmpleados titulo="COCINEROS" lista={cocineros} className="grupo-cocinero" />
+            <GrupoEmpleados titulo="ADMINISTRADORES" lista={administradores} className="grupo-admin" />
 
-            {/* ── Modal crear nuevo usuario ── */}
-            {rolCreando && (
-                <div className="emp-modal-overlay" onClick={cerrarCreacion}>
-                    <div className="emp-modal emp-modal-crear" onClick={e => e.stopPropagation()}>
-
-                        <div className={`emp-modal-header emp-modal-header-crear emp-crear-${rolCreando.toLowerCase()}`}>
-                            <h2 className="emp-modal-titulo">NUEVO {rolCreando.toUpperCase()}</h2>
-                            <p className="emp-modal-subtitulo">Completa los datos del nuevo empleado</p>
+            {modalCrearAbierta && (
+                <div className="emp-modal-overlay" onClick={cerrarModalCrear}>
+                    <div className="emp-modal" onClick={e => e.stopPropagation()}>
+                        <div className="emp-modal-header">
+                            <h2 className="emp-modal-titulo">CREAR USUARIO</h2>
+                            <p className="emp-modal-subtitulo">Completa los datos del nuevo usuario</p>
                         </div>
 
-                        <div className="emp-modal-body">
-                            <label className="emp-modal-label">Nombre:</label>
+                        <div className="emp-modal-body" style={{ display: "grid", gap: "0.75rem" }}>
+                            <label className="emp-modal-label" htmlFor="nuevo-nombre">Nombre:</label>
                             <input
+                                id="nuevo-nombre"
                                 className="emp-modal-input"
                                 type="text"
-                                placeholder="Nombre..."
                                 value={formNuevo.nombre}
                                 onChange={e => setFormNuevo({ ...formNuevo, nombre: e.target.value })}
+                                disabled={!esAdministrador || guardandoNuevo}
                             />
 
-                            <label className="emp-modal-label">Apellido:</label>
+                            <label className="emp-modal-label" htmlFor="nuevo-apellido">Apellido:</label>
                             <input
+                                id="nuevo-apellido"
                                 className="emp-modal-input"
                                 type="text"
-                                placeholder="Apellido..."
                                 value={formNuevo.apellido}
                                 onChange={e => setFormNuevo({ ...formNuevo, apellido: e.target.value })}
+                                disabled={!esAdministrador || guardandoNuevo}
                             />
 
-                            <label className="emp-modal-label">Email:</label>
+                            <label className="emp-modal-label" htmlFor="nuevo-email">Email:</label>
                             <input
+                                id="nuevo-email"
                                 className="emp-modal-input"
                                 type="email"
-                                placeholder="correo@ejemplo.com"
                                 value={formNuevo.email}
                                 onChange={e => setFormNuevo({ ...formNuevo, email: e.target.value })}
+                                disabled={!esAdministrador || guardandoNuevo}
                             />
 
-                            <label className="emp-modal-label">Contraseña:</label>
+                            <label className="emp-modal-label" htmlFor="nuevo-password">Contraseña:</label>
                             <input
+                                id="nuevo-password"
                                 className="emp-modal-input"
                                 type="password"
-                                placeholder="Contraseña segura..."
                                 value={formNuevo.password}
                                 onChange={e => setFormNuevo({ ...formNuevo, password: e.target.value })}
+                                disabled={!esAdministrador || guardandoNuevo}
                             />
-                            <p className="emp-modal-hint">Se guardará encriptada automáticamente</p>
+
+                            <label className="emp-modal-label" htmlFor="nuevo-rol">Rol:</label>
+                            <select
+                                id="nuevo-rol"
+                                className="emp-modal-select"
+                                value={formNuevo.rol}
+                                onChange={e => setFormNuevo({ ...formNuevo, rol: e.target.value })}
+                                disabled={!esAdministrador || guardandoNuevo}
+                            >
+                                <option value="administrador">administrador</option>
+                                <option value="mesero">mesero</option>
+                                <option value="cocinero">cocinero</option>
+                            </select>
 
                             {mensajeNuevo && (
                                 <p className={`emp-modal-mensaje ${mensajeNuevo.tipo === "ok" ? "emp-modal-ok" : "emp-modal-err"}`}>
@@ -258,14 +350,13 @@ function Empleados() {
                         </div>
 
                         <div className="emp-modal-footer">
-                            <button className="emp-btn-cancelar" onClick={cerrarCreacion} disabled={guardandoNuevo}>
+                            <button className="emp-btn-cancelar" onClick={cerrarModalCrear} disabled={guardandoNuevo}>
                                 Cancelar
                             </button>
-                            <button className="emp-btn-guardar" onClick={crearUsuario} disabled={guardandoNuevo}>
-                                {guardandoNuevo ? "Creando..." : "Crear Usuario"}
+                            <button className="emp-btn-guardar" onClick={crearUsuario} disabled={!esAdministrador || guardandoNuevo}>
+                                {guardandoNuevo ? "Guardando..." : "Guardar Usuario"}
                             </button>
                         </div>
-
                     </div>
                 </div>
             )}
@@ -281,16 +372,36 @@ function Empleados() {
                         </div>
 
                         <div className="emp-modal-body">
-                            <label className="emp-modal-label">Email:</label>
+                            <label className="emp-modal-label" htmlFor="editar-nombre">Nombre:</label>
                             <input
+                                id="editar-nombre"
+                                className="emp-modal-input"
+                                type="text"
+                                value={formEdicion.nombre}
+                                onChange={e => setFormEdicion({ ...formEdicion, nombre: e.target.value })}
+                            />
+
+                            <label className="emp-modal-label" htmlFor="editar-apellido">Apellido:</label>
+                            <input
+                                id="editar-apellido"
+                                className="emp-modal-input"
+                                type="text"
+                                value={formEdicion.apellido}
+                                onChange={e => setFormEdicion({ ...formEdicion, apellido: e.target.value })}
+                            />
+
+                            <label className="emp-modal-label" htmlFor="editar-email">Email:</label>
+                            <input
+                                id="editar-email"
                                 className="emp-modal-input"
                                 type="email"
                                 value={formEdicion.email}
                                 onChange={e => setFormEdicion({ ...formEdicion, email: e.target.value })}
                             />
 
-                            <label className="emp-modal-label">Rol:</label>
+                            <label className="emp-modal-label" htmlFor="editar-rol">Rol:</label>
                             <select
+                                id="editar-rol"
                                 className="emp-modal-select"
                                 value={formEdicion.rol}
                                 onChange={e => setFormEdicion({ ...formEdicion, rol: e.target.value })}
@@ -300,8 +411,9 @@ function Empleados() {
                                 <option value="Administrador">Administrador</option>
                             </select>
 
-                            <label className="emp-modal-label">Cambio de contraseña: <span className="emp-modal-opcional">(opcional)</span></label>
+                            <label className="emp-modal-label" htmlFor="editar-password">Cambio de contraseña: <span className="emp-modal-opcional">(opcional)</span></label>
                             <input
+                                id="editar-password"
                                 className="emp-modal-input"
                                 type="password"
                                 placeholder="Nueva contraseña..."
@@ -321,36 +433,49 @@ function Empleados() {
                                 Cancelar
                             </button>
                             <button className="emp-btn-guardar" onClick={guardarCambios} disabled={guardando}>
-                                {guardando ? "Guardando..." : "Editar"}
+                                {guardando ? "Guardando..." : "Guardar cambios"}
                             </button>
                         </div>
 
                     </div>
                 </div>
             )}
-            {/* ── Modal confirmacion eliminar ── */}
-            {empleadoAEliminar && (
-                <div className="emp-modal-overlay" onClick={cerrarConfirmacion}>
+            {/* ── Modal confirmacion activar/inactivar ── */}
+            {empleadoEstadoPendiente && (
+                <div className="emp-modal-overlay" onClick={cerrarConfirmacionEstado}>
                     <div className="emp-modal emp-modal-confirmar" onClick={e => e.stopPropagation()}>
 
                         <div className="emp-modal-header emp-modal-header-eliminar">
-                            <h2 className="emp-modal-titulo">ELIMINAR EMPLEADO</h2>
-                            <p className="emp-modal-nombre">{empleadoAEliminar.nombre} {empleadoAEliminar.apellido}</p>
+                            <h2 className="emp-modal-titulo">
+                                {esUsuarioActivo(empleadoEstadoPendiente) ? "DESACTIVAR USUARIO" : "ACTIVAR USUARIO"}
+                            </h2>
+                            <p className="emp-modal-nombre">{empleadoEstadoPendiente.nombre} {empleadoEstadoPendiente.apellido}</p>
                         </div>
 
                         <div className="emp-modal-body">
                             <p className="emp-confirmar-texto">
-                                ¿Estás seguro de que deseas eliminar a <strong>{empleadoAEliminar.nombre} {empleadoAEliminar.apellido}</strong>?
-                                Esta acción no se puede deshacer.
+                                {esUsuarioActivo(empleadoEstadoPendiente)
+                                    ? <>¿Deseas desactivar a <strong>{empleadoEstadoPendiente.nombre} {empleadoEstadoPendiente.apellido}</strong>? El usuario no podrá operar hasta ser reactivado.</>
+                                    : <>¿Deseas reactivar a <strong>{empleadoEstadoPendiente.nombre} {empleadoEstadoPendiente.apellido}</strong>? El usuario volverá a estar disponible en el sistema.</>
+                                }
                             </p>
                         </div>
 
                         <div className="emp-modal-footer">
-                            <button className="emp-btn-cancelar" onClick={cerrarConfirmacion} disabled={eliminando}>
+                            <button className="emp-btn-cancelar" onClick={cerrarConfirmacionEstado} disabled={actualizandoEstadoUsuario}>
                                 Cancelar
                             </button>
-                            <button className="emp-btn-eliminar-modal" onClick={eliminarEmpleado} disabled={eliminando}>
-                                {eliminando ? "Eliminando..." : "Sí, eliminar"}
+                            <button
+                                className={`emp-btn-eliminar-modal ${esUsuarioActivo(empleadoEstadoPendiente) ? "" : "emp-btn-reactivar-modal"}`}
+                                onClick={cambiarEstadoEmpleado}
+                                disabled={actualizandoEstadoUsuario}
+                            >
+                                {actualizandoEstadoUsuario
+                                    ? "Procesando..."
+                                    : esUsuarioActivo(empleadoEstadoPendiente)
+                                        ? "Sí, desactivar"
+                                        : "Sí, activar"
+                                }
                             </button>
                         </div>
 

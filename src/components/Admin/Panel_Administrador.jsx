@@ -1,13 +1,21 @@
 import { useState, useEffect } from "react"
-import axios from "axios"
 import Empleados from './Empleados'
 import Platos from './Platos'
 import Menus from './Menus'
-import '../../../Hojas_de_Estilo/Administrador.css';
+import '../../styles/Administrador.css';
 import '../../App.css';
+import api from "../../services/api";
+import { obtenerMenuDia } from "../../services/menuDia";
 
 function Panel_Administrador({usuario, setPagina}){
   const [seccion, setSeccion] = useState("panel");
+  const [resumenDashboard, setResumenDashboard] = useState({
+    estadisticas: {},
+    ingresos: {},
+    tendencia_pedidos: [],
+    platillos_top: [],
+    alertas_pedidos: [],
+  });
 
   // ── Estado del dashboard ──
   const [pedidosRealizados, setPedidosRealizados] = useState(0);
@@ -19,43 +27,43 @@ function Panel_Administrador({usuario, setPagina}){
 
   const cargarDashboard = async () => {
     try {
-      // Fecha de hoy en formato dd/mm/aaaa (igual al formato del backend)
-      const hoy = new Date();
-      const diaStr = `${hoy.getDate()}/${hoy.getMonth() + 1}/${hoy.getFullYear()}`;
+      const resResumen = await api.get("/admin/dashboard/resumen");
+      const datos = resResumen.data?.datos || {};
+      const estadisticas = datos.estadisticas || {};
+      const ingresos = datos.ingresos || {};
 
-      const [resPedidos, resMesas] = await Promise.all([
-        axios.get("http://localhost:3000/Pedido"),
-        axios.get("http://localhost:3000/Mesas"),
-      ]);
+      setResumenDashboard({
+        estadisticas,
+        ingresos,
+        tendencia_pedidos: datos.tendencia_pedidos || [],
+        platillos_top: datos.platillos_top || [],
+        alertas_pedidos: datos.alertas_pedidos || [],
+      });
 
-      const pedidos = resPedidos.data;
-      const mesas   = resMesas.data;
+      const pedidosCompletados = Number(estadisticas.pedidos_completados || 0);
+      const pedidosCancelados = Number(estadisticas.pedidos_cancelados || 0);
+      const pedidosEnProceso = Number(estadisticas.pedidos_en_proceso || 0);
 
-      // Pedidos del día (fecha_pedido empieza con el día de hoy)
-      const pedidosHoy = pedidos.filter(p => p.fecha_pedido?.startsWith(diaStr));
+      setPedidosRealizados(pedidosCompletados + pedidosCancelados + pedidosEnProceso);
+      setGananciasHoy(Number(ingresos.ingresos_totales || 0));
+      setTotalEntregados(pedidosCompletados);
 
-      // Ganancias de hoy: suma de totalPagar de pedidos de hoy
-      const ganancias = pedidosHoy.reduce((acc, p) => acc + (Number(p.totalPagar) || 0), 0);
-
-      // Total entregados del día
-      const entregados = pedidosHoy.filter(p => p.estadoPedido === "entregado").length;
-
-      // Mesas ocupadas
-      const ocupadas = mesas.filter(m => m.estado === "ocupada").length;
-
-      setPedidosRealizados(pedidosHoy.length);
-      setGananciasHoy(ganancias);
-      setTotalEntregados(entregados);
+      const ocupadas = Number(estadisticas.mesas_ocupadas || 0);
+      const libres = Number(estadisticas.mesas_libres || 0);
+      const inactivas = Number(estadisticas.mesas_inactivas || 0);
       setMesasOcupadas(ocupadas);
-      setTotalMesas(mesas.length);
+      setTotalMesas(ocupadas + libres + inactivas);
 
     } catch (err) {
       console.error("Error cargando dashboard:", err);
     }
 
-    // Cargar menú del día desde localStorage (armado por admin en sección Menús)
-    const menuGuardado = localStorage.getItem("menuDelDia");
-    setMenuDelDia(menuGuardado ? JSON.parse(menuGuardado) : []);
+    try {
+      const menuActual = await obtenerMenuDia("hoy");
+      setMenuDelDia(menuActual);
+    } catch {
+      setMenuDelDia([]);
+    }
   };
 
   useEffect(() => {
@@ -73,6 +81,11 @@ function Panel_Administrador({usuario, setPagina}){
   const porcentajeOcupadas = totalMesas > 0 ? Math.round((mesasOcupadas / totalMesas) * 100) : 0;
   const menuPlatos  = menuDelDia.filter(p => p.CategoriaId !== "4");
   const menuBebidas = menuDelDia.filter(p => p.CategoriaId === "4");
+  const estadisticas = resumenDashboard.estadisticas || {};
+  const ingresos = resumenDashboard.ingresos || {};
+  const topPlatillos = resumenDashboard.platillos_top || [];
+  const alertasPedidos = resumenDashboard.alertas_pedidos || [];
+  const tendenciaPedidos = resumenDashboard.tendencia_pedidos || [];
   const formatPrecio = (precio) => `$${Number(precio).toLocaleString("es-CO")}`;
 
   return(
@@ -120,6 +133,27 @@ function Panel_Administrador({usuario, setPagina}){
               <div className="stat-card">
                 <h3>Total Entregados</h3>
                 <p className="stat-number">{totalEntregados}</p>
+              </div>
+            </div>
+
+            <div className="stats-row stats-row-extended">
+              <div className="stat-card">
+                <h3>Pedidos Cancelados</h3>
+                <p className="stat-number">{Number(estadisticas.pedidos_cancelados || 0)}</p>
+              </div>
+              <div className="stat-card">
+                <h3>En Proceso</h3>
+                <p className="stat-number">{Number(estadisticas.pedidos_en_proceso || 0)}</p>
+              </div>
+              <div className="stat-card">
+                <h3>Ticket Promedio</h3>
+                <p className="stat-number" style={{ fontSize: "1.7rem" }}>
+                  {formatPrecio(Number(ingresos.ticket_promedio || 0))}
+                </p>
+              </div>
+              <div className="stat-card">
+                <h3>Demora Prep. Prom</h3>
+                <p className="stat-number">{Number(estadisticas.promedio_demora_preparacion_min || 0).toFixed(1)}m</p>
               </div>
             </div>
 
@@ -190,10 +224,64 @@ function Panel_Administrador({usuario, setPagina}){
                 <p style={{ color: "#888", fontSize: "0.8rem" }}>{mesasOcupadas} de {totalMesas} ({porcentajeOcupadas}%)</p>
               </div>
             </div>
+
+            <div className="main-stats-row">
+              <div className="info-box">
+                <h2>Top Platillos</h2>
+                {topPlatillos.length === 0 ? (
+                  <div className="empty-placeholder">Sin datos para el rango seleccionado</div>
+                ) : (
+                  <div style={{ maxHeight: "220px", overflowY: "auto", textAlign: "left" }}>
+                    {topPlatillos.map((p, i) => (
+                      <div key={`${p.platillo_id}-${i}`} style={{ display: "flex", justifyContent: "space-between", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "8px 0" }}>
+                        <span>{p.platillo_nombre}</span>
+                        <span style={{ color: "#e87d2a", fontWeight: 700 }}>{p.cantidad_vendida}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="info-box">
+                <h2>Alertas Pedidos</h2>
+                {alertasPedidos.length === 0 ? (
+                  <div className="empty-placeholder">No hay pedidos abiertos fuera del umbral</div>
+                ) : (
+                  <div style={{ maxHeight: "220px", overflowY: "auto", textAlign: "left" }}>
+                    {alertasPedidos.map((a) => (
+                      <div key={a.id} style={{ borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "8px 0" }}>
+                        <div style={{ fontWeight: 700 }}>Mesa #{a.mesa_numero}</div>
+                        <div style={{ color: "#bbb", fontSize: "0.85rem" }}>
+                          Pedido #{a.id} · {a.minutos_abierto} min abierto · {formatPrecio(a.total)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="info-box">
+              <h2>Tendencia Pedidos</h2>
+              {tendenciaPedidos.length === 0 ? (
+                <div className="empty-placeholder">Sin tendencia para el rango seleccionado</div>
+              ) : (
+                <div style={{ maxHeight: "180px", overflowY: "auto", textAlign: "left" }}>
+                  {tendenciaPedidos.map((t) => (
+                    <div key={t.fecha} style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr 1fr 1fr", gap: "8px", borderBottom: "1px solid rgba(255,255,255,0.08)", padding: "8px 0" }}>
+                      <span>{t.fecha}</span>
+                      <span>OK: {t.completados}</span>
+                      <span>CAN: {t.cancelados}</span>
+                      <span>TOT: {t.total}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
-        {seccion === "empleados" && <Empleados />}
+        {seccion === "empleados" && <Empleados usuario={usuario} />}
         {seccion === "platos" && <Platos />}
         {seccion === "menus" && <Menus />}
       </main>

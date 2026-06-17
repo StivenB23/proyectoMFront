@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react"
-import axios from "axios"
-import '../../../Hojas_de_Estilo/Administrador.css';
+import api, { construirUrlImagen } from "../../services/api"
+import { CATEGORIAS } from "../../services/pedidos"
+import { fechaHoyISO, guardarMenuDia, obtenerMenuDia } from "../../services/menuDia"
+import '../../styles/Administrador.css';
 import '../../App.css';
 
 const IMG_CATEGORIA = {
@@ -23,10 +25,24 @@ function Menus() {
     useEffect(() => {
         const cargarDatos = async () => {
             try {
-                const resPlatos = await axios.get("http://localhost:3000/Platos")
-                const resCategorias = await axios.get("http://localhost:3000/Categoria")
-                setPlatos(resPlatos.data)
-                setCategorias(resCategorias.data)
+                const [resPlatos, menuActual] = await Promise.all([
+                    api.get("/platillos"),
+                    obtenerMenuDia("hoy").catch(() => []),
+                ])
+                const platillos = (resPlatos.data?.datos || []).map((p) => ({
+                    id: p.id,
+                    NombrePlato: p.nombre,
+                    Descripcion: p.descripcion,
+                    Precio: Number(p.precio || 0),
+                    CategoriaId: String(p.categoria_id),
+                    imagen_url: p.imagen_url || "",
+                }))
+                setPlatos(platillos)
+                setCategorias(CATEGORIAS.map((c) => ({ id: String(c.id), NombreCategoria: c.nombre })))
+                if (menuActual.length > 0) {
+                    setMenuDelDia(menuActual.map((item) => ({ ...item, _uid: Date.now() + Math.random() })))
+                    setMenuSubido(true)
+                }
             } catch (err) {
                 setError("No se pudo conectar con el servidor")
             } finally {
@@ -34,10 +50,6 @@ function Menus() {
             }
         }
         cargarDatos()
-
-        // Si ya habia un menu subido, lo muestra
-        const menuGuardado = localStorage.getItem("menuDelDia")
-        if (menuGuardado) setMenuSubido(true)
     }, [])
 
     const agregarAlMenu = (plato) => {
@@ -50,17 +62,32 @@ function Menus() {
         setMenuSubido(false)
     }
 
-    const limpiarMenu = () => {
-        setMenuDelDia([])
-        setMenuSubido(false)
+    const limpiarMenu = async () => {
+        try {
+            await api.delete("/menu-dia/limpiar")
+            setMenuDelDia([])
+            setMenuSubido(false)
+        } catch (err) {
+            alert(err?.response?.data?.error || "No se pudo limpiar el menú del servidor")
+        }
     }
 
-    // Guarda el menu en localStorage y cierra el modal
-    const confirmarSubida = () => {
-        const menuAGuardar = menuDelDia.map(({ _uid, ...resto }) => resto) // quita el _uid temporal
-        localStorage.setItem("menuDelDia", JSON.stringify(menuAGuardar))
-        setModalConfirmar(false)
-        setMenuSubido(true)
+    const confirmarSubida = async () => {
+        try {
+            const resultado = await guardarMenuDia({
+                fecha: fechaHoyISO(),
+                items: menuDelDia,
+                publicado: true,
+            })
+
+            setMenuDelDia(resultado.items.map((item) => ({ ...item, _uid: Date.now() + Math.random() })))
+            setModalConfirmar(false)
+            setMenuSubido(true)
+            alert("Menu del dia publicado correctamente")
+        } catch (error) {
+            console.error("Error subiendo menu del dia:", error)
+            alert(error.response?.data?.error || "No se pudo publicar el menu")
+        }
     }
 
     const nombreCategoria = (id) =>
@@ -104,7 +131,7 @@ function Menus() {
                     <div className="menus-platos-lista">
                         {platosFiltrados.map(plato => (
                             <div key={plato.id} className="menus-plato-item" onClick={() => agregarAlMenu(plato)} title="Click para agregar al menú">
-                                <img src={IMG_CATEGORIA[plato.CategoriaId] ?? "/CartaCorriente.png"} alt={plato.NombrePlato} className="menus-plato-img" />
+                                <img src={construirUrlImagen(plato.imagen_url) || (IMG_CATEGORIA[plato.CategoriaId] ?? "/CartaCorriente.png")} alt={plato.NombrePlato} className="menus-plato-img" />
                                 <div className="menus-plato-info">
                                     <p className="menus-plato-nombre">{plato.NombrePlato}</p>
                                     <p className="menus-plato-desc">{plato.Descripcion}</p>
